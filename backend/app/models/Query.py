@@ -3,4 +3,5 @@ from pydantic import BaseModel
 
 class Query(BaseModel):
     prompt: str
-    model: str = "llama3.2"
+    model: str = "llama3.2:1b"
+    stream: bool = False

@@ -14,13 +14,16 @@ def index():
 
 
 @chatbot.post("/generate")
-async def generate_text(query: Query):
+def generate_text(query: Query):
     try:
         response = post(
-            url="http://localhost:11434/api/generate",
+            # sudo systemctl edit ollama
+            # /etc/systemd/system/ollama.service.d/override.conf: after editing, new contents are empty, not writing file.
+            url="http://127.0.0.1:11434/api/generate",
             json={
                 "model": query.model,
                 "prompt": query.prompt,
+                "stream": query.stream,
             },
         )
 
