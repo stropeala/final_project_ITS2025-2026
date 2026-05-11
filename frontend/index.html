@@ -1,13 +1,31 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Project</title>
+        <link rel="stylesheet" href="/src/style.css" />
+    </head>
+    <body>
+        <div class="card">
+            <header>
+                <p class="label">fastapi</p>
+                <p class="title">127.0.0.1:8000</p>
+            </header>
+
+            <div class="row">
+                <p class="label">status</p>
+                <p id="status" class="status">● connecting…</p>
+            </div>
+
+            <div class="row">
+                <p class="label">response</p>
+                <p id="message">—</p>
+            </div>
+
+            <footer>GET / · proxied via vite /api/*</footer>
+        </div>
+
+        <script type="module" src="/src/main.ts"></script>
+    </body>
 </html>
