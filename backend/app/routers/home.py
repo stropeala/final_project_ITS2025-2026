@@ -1,13 +1,21 @@
 from fastapi import APIRouter
 
-# Initialize Home router
+# Initialize Home router.
 home = APIRouter(tags=["Home"])
 
 
-# GET or POST url paths for home router
+# GET or POST url paths for router.
 @home.get("/")
-def index():
-    """PLACEHOLDER index page"""
+async def index():
+    """
+    Checker for the Homepage router.
+
+    Args:
+        None.
+
+    Returns:
+        dict: A placeholder message.
+    """
     return {
         "message": "Project is working, kinda...",
     }
