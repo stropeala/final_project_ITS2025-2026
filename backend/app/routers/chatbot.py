@@ -3,11 +3,14 @@ from requests import RequestException, post
 
 from ..models import Query
 
+# Initialize ChatBOT router
 chatbot = APIRouter(tags=["ChatBOT"])
 
 
+# GET or POST url paths for router
 @chatbot.get("/")
 def index():
+    """PLACEHOLDER index page"""
     return {
         "message": "no AI for you yet!",
     }
@@ -15,10 +18,20 @@ def index():
 
 @chatbot.post("/generate")
 def generate_text(query: Query):
+    """
+    Generates text using Ollama.
+
+    Args:
+        query: An object containing the model name, prompt, and stream options.
+
+    Returns:
+        A dictionary containing the generated text.
+
+    Raises:
+        HTTPException: If there's an error communicating with Ollama.
+    """
     try:
         response = post(
-            # sudo systemctl edit ollama
-            # /etc/systemd/system/ollama.service.d/override.conf: after editing, new contents are empty, not writing file.
             url="http://127.0.0.1:11434/api/generate",
             json={
                 "model": query.model,
