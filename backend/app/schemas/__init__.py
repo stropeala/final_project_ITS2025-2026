@@ -1,1 +1,1 @@
-from .ollama import Chat, Query
+from .ollama import Chat, Query, chats
