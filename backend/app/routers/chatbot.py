@@ -5,13 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from requests import RequestException, get, post
 from sqlalchemy.orm import Session
 
-from app.extensions import get_db
+from app.extensions import get_sqlite_db
 from app.models import Chat
 from app.schemas import Query
 
 load_dotenv()
 
-OLLAMA_URL = getenv("OLLAMA_URL")
+OLLAMA_URL = getenv("OLLAMA_URL", "http://localhost:11434")
 
 # Initialize ChatBOT router.
 chatbot = APIRouter(
@@ -38,7 +38,7 @@ async def index():
 
 
 @chatbot.post("/generate")
-async def generate_text(query: Query):
+def generate_text(query: Query):
     """
     Generate a single-turn text response from a given prompt via Ollama.
     Sends the prompt to the Ollama "/api/generate" endpoint and returns
@@ -59,8 +59,7 @@ async def generate_text(query: Query):
     """
     try:
         response = post(
-            url=OLLAMA_URL  # pyright: ignore
-            + "/api/generate",  # "Generate a response" endpoint.
+            url=OLLAMA_URL + "/api/generate",  # "Generate a response" endpoint.
             json={
                 "model": query.model,
                 "prompt": query.prompt,
@@ -79,7 +78,7 @@ async def generate_text(query: Query):
 
 
 @chatbot.get("/models")
-async def list_models():
+def list_models():
     """
     Queries the Ollama "/api/tags" endpoint and returns the full list of models.
 
@@ -95,8 +94,7 @@ async def list_models():
     """
     try:
         response = get(
-            url=OLLAMA_URL  # pyright: ignore
-            + "/api/tags"  # "List models" endpoint.
+            url=OLLAMA_URL + "/api/tags"  # "List models" endpoint.
         )
 
         response.raise_for_status()
@@ -109,13 +107,13 @@ async def list_models():
         )
 
 
-@chatbot.post("/start")
-async def start_chat(chat_id: str, db: Session = Depends(get_db)):
+@chatbot.post("/start/{chat_id}")
+def start_chat(chat_id: str, db: Session = Depends(get_sqlite_db)):
     """
-    Creates an empty "Chat" entry  keyed by a "chat_id".
+    Creates an empty "Chat" entry keyed by a "chat_id".
 
     Args:
-        chat_id (str): A unique id for the session.
+        chat_id (str): A unique id for the session, passed as a path parameter.
                     Must not already exist.
         db (Session): The injected SQLAlchemy database session.
 
@@ -138,7 +136,7 @@ async def start_chat(chat_id: str, db: Session = Depends(get_db)):
 
 
 @chatbot.post("/{chat_id}/message")
-async def add_message(chat_id: str, query: Query, db: Session = Depends(get_db)):
+def add_message(chat_id: str, query: Query, db: Session = Depends(get_sqlite_db)):
     """
     Appends "query.prompt" to the DB conversation history as a "user" turn,
     sends the full message history to Ollama "/api/chat", then appends
@@ -178,8 +176,7 @@ async def add_message(chat_id: str, query: Query, db: Session = Depends(get_db))
 
     try:
         response = post(
-            url=OLLAMA_URL  # pyright: ignore
-            + "/api/chat",  # "Generate a chat message" endpoint.
+            url=OLLAMA_URL + "/api/chat",  # "Generate a chat message" endpoint.
             json={
                 "model": query.model,  # pyright: ignore
                 "messages": chat.messages,
@@ -209,7 +206,7 @@ async def add_message(chat_id: str, query: Query, db: Session = Depends(get_db))
 
 
 @chatbot.get("/{chat_id}")
-async def get_chat(chat_id: str, db: Session = Depends(get_db)):
+def get_chat(chat_id: str, db: Session = Depends(get_sqlite_db)):
     """
     Retrieve a full existing chat session from the DB.
 
@@ -233,3 +230,31 @@ async def get_chat(chat_id: str, db: Session = Depends(get_db)):
         )
 
     return {"id": chat.id, "messages": chat.messages}
+
+
+@chatbot.delete("/{chat_id}")
+def delete_chat(chat_id: str, db: Session = Depends(get_sqlite_db)):
+    """
+    Deletes an existing chat session from the DB.
+
+    Args:
+        chat_id (str): A unique id for the session (created via "/chat/start").
+        db (Session): The injected SQLAlchemy database session.
+
+    Returns:
+        dict: A confirmation message.
+
+    Raises:
+        HTTPException (404): If no chat session exists for the given "chat_id".
+    """
+    chat = db.get(Chat, chat_id)
+    if not chat:
+        raise HTTPException(
+            status_code=404,
+            detail="Chat not found",
+        )
+
+    db.delete(chat)
+    db.commit()
+
+    return {"message": f"Chat {chat.id} deleted successfully"}
