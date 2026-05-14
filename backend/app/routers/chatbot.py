@@ -1,10 +1,23 @@
-from fastapi import APIRouter, HTTPException
-from requests import RequestException, get, post
+from os import getenv
 
-from app.schemas import Chat, Query, chats
+from dotenv import load_dotenv
+from fastapi import APIRouter, Depends, HTTPException
+from requests import RequestException, get, post
+from sqlalchemy.orm import Session
+
+from app.extensions import get_db
+from app.models import Chat
+from app.schemas import Query
+
+load_dotenv()
+
+OLLAMA_URL = getenv("OLLAMA_URL")
 
 # Initialize ChatBOT router.
-chatbot = APIRouter(tags=["ChatBOT"])
+chatbot = APIRouter(
+    prefix="/chat",
+    tags=["ChatBOT"],
+)
 
 
 # GET or POST url paths for router.
@@ -19,7 +32,6 @@ async def index():
     Returns:
         dict: A placeholder message.
     """
-
     return {
         "message": "no AI for you yet!",
     }
@@ -45,10 +57,10 @@ async def generate_text(query: Query):
     Raises:
         HTTPException (500): If the request to Ollama fails for any reason.
     """
-
     try:
         response = post(
-            url="http://127.0.0.1:11434/api/generate",  # "Generate a response" endpoint.
+            url=OLLAMA_URL  # pyright: ignore
+            + "/api/generate",  # "Generate a response" endpoint.
             json={
                 "model": query.model,
                 "prompt": query.prompt,
@@ -57,7 +69,6 @@ async def generate_text(query: Query):
         )
 
         response.raise_for_status()
-
         return {"generated_text": response.json()["response"]}
 
     except RequestException as error:
@@ -82,14 +93,13 @@ async def list_models():
     Raises:
         HTTPException (500): If the request to Ollama fails for any reason.
     """
-
     try:
         response = get(
-            url="http://localhost:11434/api/tags"  # "List models" endpoint.
+            url=OLLAMA_URL  # pyright: ignore
+            + "/api/tags"  # "List models" endpoint.
         )
 
         response.raise_for_status()
-
         return {"models": response.json()["models"]}
 
     except RequestException as error:
@@ -99,14 +109,15 @@ async def list_models():
         )
 
 
-@chatbot.post("/chat/start")
-async def start_chat(chat_id: str):
+@chatbot.post("/start")
+async def start_chat(chat_id: str, db: Session = Depends(get_db)):
     """
     Creates an empty "Chat" entry  keyed by a "chat_id".
 
     Args:
         chat_id (str): A unique id for the session.
                     Must not already exist.
+        db (Session): The injected SQLAlchemy database session.
 
     Returns:
         dict: A confirmation message.
@@ -114,25 +125,24 @@ async def start_chat(chat_id: str):
     Raises:
         HTTPException (400): If a chat with the given "chat_id" already exists.
     """
-
-    if chat_id in chats:
+    if db.get(Chat, chat_id):
         raise HTTPException(
             status_code=400,
             detail="Chat ID already exists",
         )
 
-    chats[chat_id] = Chat(id=chat_id)
+    db.add(Chat(id=chat_id, messages=[]))
+    db.commit()
 
     return {"message": f"Chat {chat_id} started"}
 
 
-@chatbot.post("/chat/{chat_id}/message")
-async def add_message(chat_id: str, query: Query):
+@chatbot.post("/{chat_id}/message")
+async def add_message(chat_id: str, query: Query, db: Session = Depends(get_db)):
     """
-    Appends "query.prompt" to the conversation history as a "user" turn,
-    sends the full message history to the Ollama "/api/chat" endpoint, then
-    appends the assistant's reply to history before returning it. Conversation
-    context is preserved for the same "chat_id".
+    Appends "query.prompt" to the DB conversation history as a "user" turn,
+    sends the full message history to Ollama "/api/chat", then appends
+    the assistant's reply before returning it.
 
     Args:
         chat_id (str): A unique id for the session (created via "/chat/start").
@@ -140,6 +150,7 @@ async def add_message(chat_id: str, query: Query):
             - prompt (str): The input text to send to the model.
             - model (str): The Ollama model to use.
             - stream (bool): Whether to stream the response.
+        db (Session): The injected SQLAlchemy database session.
 
     Returns:
         dict: A dictionary with a single key:
@@ -149,27 +160,29 @@ async def add_message(chat_id: str, query: Query):
         HTTPException (404): If no chat session exists for the given "chat_id".
         HTTPException (500): If the request to Ollama fails for any reason.
     """
-    if chat_id not in chats:
+    chat = db.get(Chat, chat_id)
+    if not chat:
         raise HTTPException(
             status_code=404,
             detail="Chat not found",
         )
 
-    chat = chats[chat_id]
-
-    chat.messages.append(
+    updated_messages = list(chat.messages) + [
         {
             "role": "user",
             "content": query.prompt,
         },
-    )
+    ]
+    chat.messages = updated_messages
+    db.flush()
 
     try:
         response = post(
-            url="http://127.0.0.1:11434/api/chat",  # "Generate a chat message" endpoint.
+            url=OLLAMA_URL  # pyright: ignore
+            + "/api/chat",  # "Generate a chat message" endpoint.
             json={
-                "model": query.model,
-                "messages": chat.messages,  # pyright: ignore
+                "model": query.model,  # pyright: ignore
+                "messages": chat.messages,
                 "stream": query.stream,
             },
         )
@@ -177,43 +190,46 @@ async def add_message(chat_id: str, query: Query):
         response.raise_for_status()
         generated_text = response.json()["message"]["content"]
 
-        chat.messages.append(
+        chat.messages = list(chat.messages) + [
             {
                 "role": "assistant",
                 "content": generated_text,
-            },
-        )
+            }
+        ]
+        db.commit()
 
         return {"generated_text": generated_text}
 
     except RequestException as error:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=f"Error communicating with Ollama: {str(error)}",
         )
 
 
-@chatbot.get("/chat/{chat_id}")
-async def get_chat(chat_id: str):
+@chatbot.get("/{chat_id}")
+async def get_chat(chat_id: str, db: Session = Depends(get_db)):
     """
-    Retrieve a full existing chat session.
+    Retrieve a full existing chat session from the DB.
 
     Args:
         chat_id (str): A unique id for the session (created via "/chat/start").
+        db (Session): The injected SQLAlchemy database session.
 
     Returns:
-        Chat: The chat object, containing:
+        dict: A dictionary containing:
             - id (str): The session identifier.
             - messages (list[dict]): The ordered list of messages.
 
     Raises:
         HTTPException (404): If no chat session exists for the given "chat_id".
     """
-
-    if chat_id not in chats:
+    chat = db.get(Chat, chat_id)
+    if not chat:
         raise HTTPException(
             status_code=404,
             detail="Chat not found",
         )
 
-    return chats[chat_id]
+    return {"id": chat.id, "messages": chat.messages}
