@@ -247,3 +247,4 @@ dist-ssr
 migrations
 alembic.ini
 chats.db
+users.db
