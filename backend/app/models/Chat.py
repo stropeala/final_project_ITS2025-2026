@@ -4,10 +4,10 @@ from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
 
-from app.extensions import Base
+from app.extensions import BaseSQLite
 
 
-class Chat(Base):
+class Chat(BaseSQLite):
     __tablename__ = "Chats"
 
     id: Mapped[str] = mapped_column(
