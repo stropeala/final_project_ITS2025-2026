@@ -13,10 +13,25 @@ from app.models import User
 
 load_dotenv()
 
-SECRET_KEY = getenv("SECRET_KEY", "super-secret-key69")
-ALGORITHM = getenv("ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60))
+SECRET_KEY = getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError(
+        "SECRET_KEY environment variable is not set. Check your .env file."
+    )
 
+ALGORITHM = getenv("ALGORITHM", "HS256")
+
+ACCESS_TOKEN_EXPIRE_MINUTES = getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60)
+try:
+    ACCESS_TOKEN_EXPIRE_MINUTES = int(ACCESS_TOKEN_EXPIRE_MINUTES)
+except ValueError:
+    raise RuntimeError(
+        "ACCESS_TOKEN_EXPIRE_MINUTES environment variable must be an integer. Check your .env file."
+    )
+if ACCESS_TOKEN_EXPIRE_MINUTES <= 0:
+    raise RuntimeError(
+        "ACCESS_TOKEN_EXPIRE_MINUTES must be a positive integer. Check your .env file."
+    )
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -63,11 +78,11 @@ def create_access_token(data: dict) -> str:
     """
     payload = data.copy()
     expiry_time = datetime.now(timezone.utc) + timedelta(
-        minutes=ACCESS_TOKEN_EXPIRE_MINUTES
+        minutes=ACCESS_TOKEN_EXPIRE_MINUTES  # pyright: ignore
     )
     payload["exp"] = expiry_time
 
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)  # pyright: ignore
 
 
 def decode_access_token(token: str) -> dict:
@@ -84,8 +99,9 @@ def decode_access_token(token: str) -> dict:
         HTTPException (401): If the token is malformed, tampered with, or expired.
     """
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])  # pyright: ignore
         return payload
+
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -102,7 +118,8 @@ def get_current_user(
     db: Session = Depends(get_postgresql_db),
 ) -> User:
     """
-    Resolve the authenticated User from the bearer token in the request.
+    A FastAPI dependency function. Any route that lists this as a dependency
+    will automatically require the caller to be logged in.
 
     Decodes the JWT, extracts the "sub" claim as the user ID, and loads
     the corresponding User row from PostgreSQL.
@@ -116,17 +133,29 @@ def get_current_user(
         User: The authenticated user record.
 
     Raises:
-        HTTPException (401): If the token is invalid, missing a user ID,
-            or refers to a user that no longer exists.
+        HTTPException (401): If the token is invalid, the user ID claim
+            is missing or non-numeric, or refers to a user that no longer
+            exists.
     """
+
+    # Decode the token string into a Python dict
     payload = decode_access_token(credentials.credentials)
 
+    # "sub" (subject) is the standard JWT field for the user's identifier.
+    # We stored the user ID here when we created the token.
     user_id = payload.get("sub")
 
     if user_id is None:
         raise HTTPException(status_code=401, detail="Token is missing user ID.")
 
-    user = db.query(User).filter(User.id == int(user_id)).first()
+    try:
+        user_id_int = int(user_id)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=401, detail="Token has an invalid user ID.")
+
+    # Look up the user in the database.
+    # int(user_id) converts the string "5" back to the integer 5.
+    user = db.query(User).filter(User.id == user_id_int).first()
 
     if user is None:
         raise HTTPException(status_code=401, detail="User account no longer exists.")
@@ -136,7 +165,7 @@ def get_current_user(
 
 def require_role(*allowed_roles: str):
     """
-    Build a FastAPI dependency that enforces role-based access control.
+    Factory that creates a role-checking FastAPI dependency.
 
     Returns a callable suitable for use with Depends(...). The returned
     dependency authenticates the user via get_current_user and then checks
@@ -155,18 +184,22 @@ def require_role(*allowed_roles: str):
             current user's role is not in the allowed set.
     """
 
+    # This inner function is the actual dependency FastAPI will call
     def check_role(current_user: User = Depends(get_current_user)) -> User:
 
+        # Check if the logged-in user's role is in our allowed list
         if current_user.role not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access denied. Required role: {' or '.join(allowed_roles)}.",
             )
-
+        # If the role is allowed, return the user so the route can use it
         return current_user
 
     return check_role
 
 
+# Handy shortcuts – routes can write Depends(require_admin) instead of
+# Depends(require_role("admin")) each time.
 require_admin = require_role("Admin")
 require_any = require_role("Admin", "User")
