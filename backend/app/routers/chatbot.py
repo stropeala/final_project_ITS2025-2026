@@ -5,8 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from requests import RequestException, get, post
 from sqlalchemy.orm import Session
 
+from app.auth import require_any
 from app.extensions import get_sqlite_db
-from app.models import Chat
+from app.models import Chat, User
 from app.schemas import Query
 
 load_dotenv()
@@ -38,7 +39,10 @@ async def index():
 
 
 @chatbot.post("/generate")
-def generate_text(query: Query):
+def generate_text(
+    query: Query,
+    _: User = Depends(require_any),
+):
     """
     Generate a single-turn text response from a given prompt via Ollama.
     Sends the prompt to the Ollama "/api/generate" endpoint and returns
@@ -49,6 +53,8 @@ def generate_text(query: Query):
             - prompt (str): The input text to send to the model.
             - model (str): The Ollama model to use.
             - stream (bool): Whether to stream the response.
+        _ (User): Unused; injected for its side effect of enforcing
+                the Any role requirement.
 
     Returns:
         dict: A dictionary with a single key:
@@ -65,6 +71,7 @@ def generate_text(query: Query):
                 "prompt": query.prompt,
                 "stream": query.stream,
             },
+            timeout=(5, 120),
         )
 
         response.raise_for_status()
@@ -78,12 +85,13 @@ def generate_text(query: Query):
 
 
 @chatbot.get("/models")
-def list_models():
+def list_models(_: User = Depends(require_any)):
     """
     Queries the Ollama "/api/tags" endpoint and returns the full list of models.
 
     Args:
-        None.
+        _ (User): Unused; injected for its side effect of enforcing
+                the Any role requirement.
 
     Returns:
         dict: A dictionary with a single key:
@@ -94,7 +102,8 @@ def list_models():
     """
     try:
         response = get(
-            url=OLLAMA_URL + "/api/tags"  # "List models" endpoint.
+            url=OLLAMA_URL + "/api/tags",  # "List models" endpoint.
+            timeout=(5, 10),
         )
 
         response.raise_for_status()
@@ -108,7 +117,11 @@ def list_models():
 
 
 @chatbot.post("/start/{chat_id}")
-def start_chat(chat_id: str, db: Session = Depends(get_sqlite_db)):
+def start_chat(
+    chat_id: str,
+    db: Session = Depends(get_sqlite_db),
+    _: User = Depends(require_any),
+):
     """
     Creates an empty "Chat" entry keyed by a "chat_id".
 
@@ -116,6 +129,8 @@ def start_chat(chat_id: str, db: Session = Depends(get_sqlite_db)):
         chat_id (str): A unique id for the session, passed as a path parameter.
                     Must not already exist.
         db (Session): The injected SQLAlchemy database session.
+        _ (User): Unused; injected for its side effect of enforcing
+                the Any role requirement.
 
     Returns:
         dict: A confirmation message.
@@ -136,7 +151,12 @@ def start_chat(chat_id: str, db: Session = Depends(get_sqlite_db)):
 
 
 @chatbot.post("/{chat_id}/message")
-def add_message(chat_id: str, query: Query, db: Session = Depends(get_sqlite_db)):
+def add_message(
+    chat_id: str,
+    query: Query,
+    db: Session = Depends(get_sqlite_db),
+    _: User = Depends(require_any),
+):
     """
     Appends "query.prompt" to the DB conversation history as a "user" turn,
     sends the full message history to Ollama "/api/chat", then appends
@@ -149,6 +169,8 @@ def add_message(chat_id: str, query: Query, db: Session = Depends(get_sqlite_db)
             - model (str): The Ollama model to use.
             - stream (bool): Whether to stream the response.
         db (Session): The injected SQLAlchemy database session.
+        _ (User): Unused; injected for its side effect of enforcing
+                the Any role requirement.
 
     Returns:
         dict: A dictionary with a single key:
@@ -182,6 +204,7 @@ def add_message(chat_id: str, query: Query, db: Session = Depends(get_sqlite_db)
                 "messages": chat.messages,
                 "stream": query.stream,
             },
+            timeout=(5, 120),
         )
 
         response.raise_for_status()
@@ -206,13 +229,19 @@ def add_message(chat_id: str, query: Query, db: Session = Depends(get_sqlite_db)
 
 
 @chatbot.get("/{chat_id}")
-def get_chat(chat_id: str, db: Session = Depends(get_sqlite_db)):
+def get_chat(
+    chat_id: str,
+    db: Session = Depends(get_sqlite_db),
+    _: User = Depends(require_any),
+):
     """
     Retrieve a full existing chat session from the DB.
 
     Args:
         chat_id (str): A unique id for the session (created via "/chat/start").
         db (Session): The injected SQLAlchemy database session.
+        _ (User): Unused; injected for its side effect of enforcing
+                the Any role requirement.
 
     Returns:
         dict: A dictionary containing:
@@ -233,13 +262,19 @@ def get_chat(chat_id: str, db: Session = Depends(get_sqlite_db)):
 
 
 @chatbot.delete("/{chat_id}")
-def delete_chat(chat_id: str, db: Session = Depends(get_sqlite_db)):
+def delete_chat(
+    chat_id: str,
+    db: Session = Depends(get_sqlite_db),
+    _: User = Depends(require_any),
+):
     """
     Deletes an existing chat session from the DB.
 
     Args:
         chat_id (str): A unique id for the session (created via "/chat/start").
         db (Session): The injected SQLAlchemy database session.
+        _ (User): Unused; injected for its side effect of enforcing
+                the Any role requirement.
 
     Returns:
         dict: A confirmation message.
