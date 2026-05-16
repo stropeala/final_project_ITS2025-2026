@@ -17,7 +17,7 @@ This project is a local web application with a website and AI chatbot interface.
 |---|---|
 | Frontend | Vite + TypeScript (vanilla) |
 | Backend | FastAPI (Python) |
-| Database | SQLite & PostgreSQL via SQLAlchemy + Alembic |
+| Database | SQLite (Chats) & PostgreSQL (Users) via SQLAlchemy + Alembic |
 | AI runtime | Ollama (local) |
 
 ## Getting Started
