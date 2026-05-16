@@ -4,10 +4,11 @@ Website powered by a fully localized AI chatbot with no API integration and no d
 
 ## Overview
 
-This project is a local web application with a website and AI chatbot interface. All requests are proxied through the backend to a locally hosted [Ollama](https://ollama.com) service, which means that the AI will run locally on my machine. Any chat conversation data is also stored locally using a SQLite database via SQLAlchemy.
+This project is a local web application with a website and AI chatbot interface. All requests are proxied through the backend to a locally hosted [Ollama](https://ollama.com) service, which means that the AI will run locally on my machine. Any chat conversation data is stored locally using an SQLite database via SQLAlchemy and users are stored using PostgreSQL also via SQLAlchemy.
 
 ## Features
-
+*   **WIP** 
+*   **THIS IS AN UNFINISHED PROJECT** 
 *   **WIP** 
 
 ## Technology
@@ -16,10 +17,12 @@ This project is a local web application with a website and AI chatbot interface.
 |---|---|
 | Frontend | Vite + TypeScript (vanilla) |
 | Backend | FastAPI (Python) |
-| Database | SQLite via SQLAlchemy + Alembic |
+| Database | SQLite & PostgreSQL via SQLAlchemy + Alembic |
 | AI runtime | Ollama (local) |
 
 ## Getting Started
+
+### This assumes you have Ollama installed and a PosgreSQL db setup already
 
 ### 1. Install Python dependencies
  
@@ -30,7 +33,7 @@ pip install -r requirements.txt
 ### 2. Configure environment
 
 ```ini
-# .env
+# .env example
 SQLITE_URL=sqlite:///./chats.db
 POSTGRESQL_URL=postgresql://user:password@localhost/users
 OLLAMA_URL=http://127.0.0.1:11434
@@ -51,23 +54,33 @@ DEFAULT_ADMIN_PASSWORD="admin123"
 alembic init --template multidb migrations
 ```
 
-### 3. Add DB engine urls in alembic.ini
-```ini
-databases = engine1, engine2
+### 3. Modify env.py inside migrations dir
 
-[engine1]
-sqlalchemy.url = sqlite:///./chats.db
+#### Add this in the imports
 
-[engine2]
-sqlalchemy.url = postgresql://user:password@localhost/users
-```
-
-### 4. Modify env.py inside migrations
 ```python
-from app.extensions import BasePostgreSQL, BaseSQLite
+from app.extensions import (
+    POSTGRESQL_URL,
+    SQLITE_URL,
+    BasePostgreSQL,
+    BaseSQLite,
+)
 from app.models import Chat, User
 ```
-#### &
+
+#### then add this below ```config = context.config```
+
+```python
+# Override the engine sqlalchemy.url values from alembic.ini with the
+# same URLs the running FastAPI app uses. This keeps the migrations and
+# application pointed at the same databases. The variables are now in
+# .env instead of alembic.ini
+config.set_section_option("engine1", "sqlalchemy.url", SQLITE_URL)
+config.set_section_option("engine2", "sqlalchemy.url", POSTGRESQL_URL)
+```
+
+#### and finally modify ```target_metadata = {}```
+
 ```python
 target_metadata = {
     "engine1": BaseSQLite.metadata,
@@ -75,23 +88,24 @@ target_metadata = {
 }
 ```
 
-### 5. Finish setting up alembic 
+### 4. Finish setting up alembic 
+
 ```bash
 alembic revision --autogenerate -m "first init"
 alembic upgrade head
 ```
 
-### 6. Start the backend
+### 5. Start the backend
  
 ```bash
 uvicorn app.run:chatbot_project --reload
 ```
 
-### 7. Install frontend dependencies and start the dev server
+### 6. Install frontend dependencies and start the dev server
  
 ```bash
 npm install
 npm run dev
 ```
 
-## 8. ENJOY!
+## 7. ENJOY!
