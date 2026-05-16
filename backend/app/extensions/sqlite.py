@@ -23,12 +23,20 @@ SQLiteSession = sessionmaker(
 
 
 class BaseSQLite(DeclarativeBase):
+    """
+    Declarative base for all SQLAlchemy ORM models stored in SQLite.
+
+    Models that inherit from this class are bound to the SQLite engine
+    (currently used for chat session storage). Kept separate from
+    "BasePostgreSQL" so the two databases share no metadata.
+    """
+
     pass
 
 
 def get_sqlite_db():
     """
-    FastAPI dependency that yields a scoped PostgreSQL session.
+    FastAPI dependency that yields a scoped SQLite session.
 
     Opens a new session per request and guarantees it is closed afterwards,
     even if the request handler raises.

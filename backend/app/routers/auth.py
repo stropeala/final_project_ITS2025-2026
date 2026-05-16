@@ -16,7 +16,10 @@ auth = APIRouter(prefix="/auth", tags=["Auth"])
 
 
 @auth.post("/login", response_model=TokenOut)
-def login(payload: LoginRequest, db: Session = Depends(get_postgresql_db)):
+def login(
+    payload: LoginRequest,
+    db: Session = Depends(get_postgresql_db),
+):
     """
     Authenticate a user with username/password and issue a JWT.
 
@@ -40,6 +43,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_postgresql_db)):
     """
     user = db.query(User).filter(User.username == payload.username).first()
 
+    # We combine both checks so we don't reveal WHICH one failed
+    # (otherwise an attacker could probe which usernames exist).
     if not user or not verify_password(payload.password, user.hashed_password):  # pyright: ignore
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -50,8 +55,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_postgresql_db)):
     return TokenOut(access_token=token)
 
 
-@auth.get("/me", response_model=UserOut)
-def me(current_user: User = Depends(get_current_user)):
+@auth.get("/profile", response_model=UserOut)
+def profile(current_user: User = Depends(get_current_user)):
     """
     Return the currently authenticated user.
 
@@ -120,6 +125,7 @@ def create_user(
         HTTPException (401): If the request is not authenticated.
         HTTPException (403): If the caller is not an Admin.
     """
+    # We check that the username isn't already taken.
     existing = db.query(User).filter(User.username == payload.username).first()
     if existing:
         raise HTTPException(status_code=400, detail="That username is already taken.")
@@ -163,6 +169,7 @@ def delete_user(
         HTTPException (403): If the caller is not an Admin.
         HTTPException (404): If no user exists with the given ID.
     """
+    # Prevent an admin from accidentally deleting their own account.
     if user_id == current_user.id:
         raise HTTPException(
             status_code=400, detail="You cannot delete your own account."

@@ -22,6 +22,14 @@ PostgreSQLSession = sessionmaker(
 
 
 class BasePostgreSQL(DeclarativeBase):
+    """
+    Declarative base for all SQLAlchemy ORM models stored in PostgreSQL.
+
+    Models that inherit from this class are bound to the PostgreSQL engine
+    (currently used for user accounts). Kept separate from "BaseSQLite"
+    so the two databases share no metadata.
+    """
+
     pass
 
 
