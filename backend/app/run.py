@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.auth import seed_admin, seed_normal_user
-from app.routers import auth_router, chatbot_router, home_router
+from app.routers import admin_router, auth_router, chatbot_router, home_router
 
 
 @asynccontextmanager
@@ -40,3 +40,4 @@ chatbot_project = FastAPI(
 chatbot_project.include_router(home_router)
 chatbot_project.include_router(chatbot_router)
 chatbot_project.include_router(auth_router)
+chatbot_project.include_router(admin_router)
