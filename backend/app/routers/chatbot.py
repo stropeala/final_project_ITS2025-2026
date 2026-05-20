@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from requests import RequestException, get, post
 from sqlalchemy.orm import Session
 
-from app.auth import require_any
+from app.auth import get_current_user, require_any
 from app.extensions import get_sqlite_db
 from app.models import Chat, User
 from app.schemas import Query
@@ -21,27 +21,13 @@ chatbot = APIRouter(
 )
 
 
-# GET or POST url paths for router.
-@chatbot.get("/")
-async def index():
-    """
-    Checker for the ChatBOT router.
-
-    Args:
-        None.
-
-    Returns:
-        dict: A placeholder message.
-    """
-    return {
-        "message": "no AI for you yet!",
-    }
+# GET or POST url paths for router:
 
 
 @chatbot.post("/generate")
 def generate_text(
     query: Query,
-    _: User = Depends(require_any),
+    require_any: User = Depends(require_any),
 ):
     """
     Generate a single-turn text response from a given prompt via Ollama.
@@ -53,7 +39,7 @@ def generate_text(
             - prompt (str): The input text to send to the model.
             - model (str): The Ollama model to use.
             - stream (bool): Whether to stream the response.
-        _ (User): Unused; injected for its side effect of enforcing
+        require_any (User): Unused; injected for its side effect of enforcing
                 the Any role requirement.
 
     Returns:
@@ -85,12 +71,12 @@ def generate_text(
 
 
 @chatbot.get("/models")
-def list_models(_: User = Depends(require_any)):
+def list_models(require_any: User = Depends(require_any)):
     """
     Queries the Ollama "/api/tags" endpoint and returns the full list of models.
 
     Args:
-        _ (User): Unused; injected for its side effect of enforcing
+        require_any (User): Unused; injected for its side effect of enforcing
                 the Any role requirement.
 
     Returns:
@@ -119,8 +105,8 @@ def list_models(_: User = Depends(require_any)):
 @chatbot.post("/start/{chat_id}")
 def start_chat(
     chat_id: str,
-    db: Session = Depends(get_sqlite_db),
-    _: User = Depends(require_any),
+    chats_db: Session = Depends(get_sqlite_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Creates an empty "Chat" entry keyed by a "chat_id".
@@ -129,8 +115,8 @@ def start_chat(
         chat_id (str): A unique id for the session, passed as a path parameter.
                     Must not already exist.
         db (Session): The injected SQLAlchemy database session.
-        _ (User): Unused; injected for its side effect of enforcing
-                the Any role requirement.
+        current_user (User): The authenticated user, it provides the
+                    user_id key.
 
     Returns:
         dict: A confirmation message.
@@ -138,14 +124,20 @@ def start_chat(
     Raises:
         HTTPException (400): If a chat with the given "chat_id" already exists.
     """
-    if db.get(Chat, chat_id):
+    if chats_db.get(Chat, (current_user.id, chat_id)):
         raise HTTPException(
             status_code=400,
             detail="Chat ID already exists",
         )
 
-    db.add(Chat(id=chat_id, messages=[]))
-    db.commit()
+    chats_db.add(
+        Chat(
+            user_id=current_user.id,
+            id=chat_id,
+            messages=[],
+        ),
+    )
+    chats_db.commit()
 
     return {"message": f"Chat {chat_id} started"}
 
@@ -154,8 +146,8 @@ def start_chat(
 def add_message(
     chat_id: str,
     query: Query,
-    db: Session = Depends(get_sqlite_db),
-    _: User = Depends(require_any),
+    chats_db: Session = Depends(get_sqlite_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Appends "query.prompt" to the DB conversation history as a "user" turn,
@@ -169,8 +161,8 @@ def add_message(
             - model (str): The Ollama model to use.
             - stream (bool): Whether to stream the response.
         db (Session): The injected SQLAlchemy database session.
-        _ (User): Unused; injected for its side effect of enforcing
-                the Any role requirement.
+        current_user (User): The authenticated user, it provides the
+                    user_id key.
 
     Returns:
         dict: A dictionary with a single key:
@@ -180,7 +172,7 @@ def add_message(
         HTTPException (404): If no chat session exists for the given "chat_id".
         HTTPException (500): If the request to Ollama fails for any reason.
     """
-    chat = db.get(Chat, chat_id)
+    chat = chats_db.get(Chat, (current_user.id, chat_id))
     if not chat:
         raise HTTPException(
             status_code=404,
@@ -194,7 +186,7 @@ def add_message(
         },
     ]
     chat.messages = updated_messages
-    db.flush()
+    chats_db.flush()
 
     try:
         response = post(
@@ -216,23 +208,33 @@ def add_message(
                 "content": generated_text,
             }
         ]
-        db.commit()
+        chats_db.commit()
 
         return {"generated_text": generated_text}
 
     except RequestException as error:
-        db.rollback()
+        chats_db.rollback()
         raise HTTPException(
             status_code=500,
             detail=f"Error communicating with Ollama: {str(error)}",
         )
 
 
+@chatbot.get("/{user_id}/chats")
+def get_chats(
+    chats_db: Session = Depends(get_sqlite_db),
+    current_user: User = Depends(get_current_user),
+):
+    chats = chats_db.query(Chat).filter(Chat.user_id == current_user.id).all()
+
+    return [{"id": chat.id} for chat in chats]
+
+
 @chatbot.get("/{chat_id}")
 def get_chat(
     chat_id: str,
-    db: Session = Depends(get_sqlite_db),
-    _: User = Depends(require_any),
+    chats_db: Session = Depends(get_sqlite_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Retrieve a full existing chat session from the DB.
@@ -240,8 +242,8 @@ def get_chat(
     Args:
         chat_id (str): A unique id for the session (created via "/chat/start").
         db (Session): The injected SQLAlchemy database session.
-        _ (User): Unused; injected for its side effect of enforcing
-                the Any role requirement.
+        current_user (User): The authenticated user, it provides the
+                    user_id key.
 
     Returns:
         dict: A dictionary containing:
@@ -251,7 +253,7 @@ def get_chat(
     Raises:
         HTTPException (404): If no chat session exists for the given "chat_id".
     """
-    chat = db.get(Chat, chat_id)
+    chat = chats_db.get(Chat, (current_user.id, chat_id))
     if not chat:
         raise HTTPException(
             status_code=404,
@@ -264,8 +266,8 @@ def get_chat(
 @chatbot.delete("/{chat_id}")
 def delete_chat(
     chat_id: str,
-    db: Session = Depends(get_sqlite_db),
-    _: User = Depends(require_any),
+    chats_db: Session = Depends(get_sqlite_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Deletes an existing chat session from the DB.
@@ -273,8 +275,8 @@ def delete_chat(
     Args:
         chat_id (str): A unique id for the session (created via "/chat/start").
         db (Session): The injected SQLAlchemy database session.
-        _ (User): Unused; injected for its side effect of enforcing
-                the Any role requirement.
+        current_user (User): The authenticated user, it provides the
+                    user_id key to be along the chat_id key.
 
     Returns:
         dict: A confirmation message.
@@ -282,14 +284,14 @@ def delete_chat(
     Raises:
         HTTPException (404): If no chat session exists for the given "chat_id".
     """
-    chat = db.get(Chat, chat_id)
+    chat = chats_db.get(Chat, (current_user.id, chat_id))
     if not chat:
         raise HTTPException(
             status_code=404,
             detail="Chat not found",
         )
 
-    db.delete(chat)
-    db.commit()
+    chats_db.delete(chat)
+    chats_db.commit()
 
     return {"message": f"Chat {chat.id} deleted successfully"}

@@ -5,4 +5,10 @@ from .postgresql import (
     get_postgresql_db,
     postgresql_engine,
 )
-from .sqlite import SQLITE_URL, BaseSQLite, get_sqlite_db
+from .sqlite import (
+    SQLITE_URL,
+    BaseSQLite,
+    SQLiteSession,
+    get_sqlite_db,
+    sqlite_engine,
+)
