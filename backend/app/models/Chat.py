@@ -9,19 +9,19 @@ from app.extensions import BaseSQLite
 
 class Chat(BaseSQLite):
     """
-    SQLAlchemy ORM model for a chatbot conversation, stored in SQLite.
+    SQLAlchemy ORM model for a chatbot chat, stored in SQLite.
 
     Backs the "Chats" table. Each row holds the full message history for
-    a single session, persisted as a JSON list of role/content pairs.
+    a single session, persisted as a JSON list of role and content pairs.
 
     Attributes:
-        user_id(int): The user identifier from the Users db. Primary key,
-            indexed.
-        id (str): The client-supplied session identifier. Primary key,
-            indexed. Must be unique across all chats.
+        user_id (int): The user identifier from the Users db. Primary key,
+                    indexed.
+        chat_id (str): The user-supplied session identifier. Primary key,
+                    indexed. Must be unique across all chats.
         messages (List[Dict[str, str]]): The ordered conversation history.
-            Each entry is a dict like {"role": "user" | "assistant",
-            "content": "..."}. Non-nullable; defaults to an empty list.
+                    Each entry is a dict like {"role": "user" or "assistant",
+                    "content": "..."}. Non-nullable; defaults to an empty list.
     """
 
     __tablename__ = "Chats"
@@ -31,7 +31,7 @@ class Chat(BaseSQLite):
         primary_key=True,
         index=True,
     )
-    id: Mapped[str] = mapped_column(
+    chat_id: Mapped[str] = mapped_column(
         String,
         primary_key=True,
         index=True,

@@ -35,7 +35,7 @@ class BasePostgreSQL(DeclarativeBase):
 
 def get_postgresql_db():
     """
-    FastAPI dependency that yields a scoped PostgreSQL session.
+    FastAPI dependency that yields a PostgreSQL session.
 
     Opens a new session per request and guarantees it is closed afterwards,
     even if the request handler raises.

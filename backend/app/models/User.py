@@ -9,16 +9,15 @@ class User(BasePostgreSQL):
     SQLAlchemy ORM model for a registered account, stored in PostgreSQL.
 
     Backs the "Users" table. Each row represents a single account that can
-    authenticate against "/auth/login" and act under the privileges of its
-    assigned role.
+    authenticate in "/auth/login" and act under its assigned role.
 
     Attributes:
         id (int): Auto-incrementing primary key. Indexed.
         username (str): Unique login name. Indexed, non-nullable.
         hashed_password (str): The bcrypt hash of the user's password.
-            Non-nullable.
+                            Non-nullable.
         role (str): The user's role, either "Admin" or "User". Defaults
-            to "User". Enforced at the application layer via "require_role".
+                    to "User".
     """
 
     __tablename__ = "Users"

@@ -8,7 +8,7 @@ home = APIRouter(tags=["Home"])
 @home.get("/")
 async def index():
     """
-    Checker for the Homepage router.
+    Checks the Homepage router.
 
     Args:
         None.
@@ -17,5 +17,5 @@ async def index():
         dict: A placeholder message.
     """
     return {
-        "message": "Project is working, kinda...",
+        "message": "Project is working...",
     }

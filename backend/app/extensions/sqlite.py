@@ -36,7 +36,7 @@ class BaseSQLite(DeclarativeBase):
 
 def get_sqlite_db():
     """
-    FastAPI dependency that yields a scoped SQLite session.
+    FastAPI dependency that yields an SQLite session.
 
     Opens a new session per request and guarantees it is closed afterwards,
     even if the request handler raises.

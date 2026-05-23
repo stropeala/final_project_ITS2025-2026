@@ -1,7 +1,7 @@
 from os import getenv
 
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from requests import RequestException, get, post
 from sqlalchemy.orm import Session
 
@@ -30,9 +30,9 @@ def generate_text(
     require_any: User = Depends(require_any),
 ):
     """
-    Generate a single-turn text response from a given prompt via Ollama.
+    Generates a single-turn text response from a given prompt via Ollama.
     Sends the prompt to the Ollama "/api/generate" endpoint and returns
-    the model's raw text output.
+    the model's text output.
 
     Args:
         query (Query): The generation request, containing:
@@ -40,7 +40,7 @@ def generate_text(
             - model (str): The Ollama model to use.
             - stream (bool): Whether to stream the response.
         require_any (User): Unused; injected for its side effect of enforcing
-                the Any role requirement.
+                            the Any role requirement.
 
     Returns:
         dict: A dictionary with a single key:
@@ -65,19 +65,21 @@ def generate_text(
 
     except RequestException as error:
         raise HTTPException(
-            status_code=500,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error communicating with Ollama: {str(error)}",
         )
 
 
 @chatbot.get("/models")
-def list_models(require_any: User = Depends(require_any)):
+def list_models(
+    require_any: User = Depends(require_any),
+):
     """
     Queries the Ollama "/api/tags" endpoint and returns the full list of models.
 
     Args:
         require_any (User): Unused; injected for its side effect of enforcing
-                the Any role requirement.
+                            the Any role requirement.
 
     Returns:
         dict: A dictionary with a single key:
@@ -93,11 +95,13 @@ def list_models(require_any: User = Depends(require_any)):
         )
 
         response.raise_for_status()
-        return {"models": response.json()["models"]}
+        return {
+            "models": response.json()["models"],
+        }
 
     except RequestException as error:
         raise HTTPException(
-            status_code=500,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching models from Ollama: {str(error)}",
         )
 
@@ -114,9 +118,9 @@ def start_chat(
     Args:
         chat_id (str): A unique id for the session, passed as a path parameter.
                     Must not already exist.
-        db (Session): The injected SQLAlchemy database session.
+        chats_db (Session): The injected SQLAlchemy database session.
         current_user (User): The authenticated user, it provides the
-                    user_id key.
+                            user_id key.
 
     Returns:
         dict: A confirmation message.
@@ -126,14 +130,14 @@ def start_chat(
     """
     if chats_db.get(Chat, (current_user.id, chat_id)):
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Chat ID already exists",
         )
 
     chats_db.add(
         Chat(
             user_id=current_user.id,
-            id=chat_id,
+            chat_id=chat_id,
             messages=[],
         ),
     )
@@ -160,9 +164,9 @@ def add_message(
             - prompt (str): The input text to send to the model.
             - model (str): The Ollama model to use.
             - stream (bool): Whether to stream the response.
-        db (Session): The injected SQLAlchemy database session.
+        chats_db (Session): The injected SQLAlchemy database session.
         current_user (User): The authenticated user, it provides the
-                    user_id key.
+                            user_id key.
 
     Returns:
         dict: A dictionary with a single key:
@@ -175,7 +179,7 @@ def add_message(
     chat = chats_db.get(Chat, (current_user.id, chat_id))
     if not chat:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Chat not found",
         )
 
@@ -215,7 +219,7 @@ def add_message(
     except RequestException as error:
         chats_db.rollback()
         raise HTTPException(
-            status_code=500,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error communicating with Ollama: {str(error)}",
         )
 
@@ -225,9 +229,21 @@ def get_chats(
     chats_db: Session = Depends(get_sqlite_db),
     current_user: User = Depends(get_current_user),
 ):
+    """
+    Lists every chat owned by the current user.
+
+    Args:
+        chats_db (Session): The injected SQLAlchemy database session.
+        current_user (User): The authenticated user, it provides the
+                            user_id key.
+
+    Returns:
+        list[dict]: One dict per chat with keys:
+            - chat_id (str): The chat ID.
+    """
     chats = chats_db.query(Chat).filter(Chat.user_id == current_user.id).all()
 
-    return [{"id": chat.id} for chat in chats]
+    return [{"chat_id": chat.chat_id} for chat in chats]
 
 
 @chatbot.get("/{chat_id}")
@@ -237,17 +253,17 @@ def get_chat(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Retrieve a full existing chat session from the DB.
+    Retrieves a full existing chat session from the DB.
 
     Args:
         chat_id (str): A unique id for the session (created via "/chat/start").
-        db (Session): The injected SQLAlchemy database session.
+        chats_db (Session): The injected SQLAlchemy database session.
         current_user (User): The authenticated user, it provides the
-                    user_id key.
+                            user_id key.
 
     Returns:
         dict: A dictionary containing:
-            - id (str): The session identifier.
+            - chat_id (str): The session identifier.
             - messages (list[dict]): The ordered list of messages.
 
     Raises:
@@ -256,11 +272,11 @@ def get_chat(
     chat = chats_db.get(Chat, (current_user.id, chat_id))
     if not chat:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Chat not found",
         )
 
-    return {"id": chat.id, "messages": chat.messages}
+    return {"chat_id": chat.chat_id, "messages": chat.messages}
 
 
 @chatbot.delete("/{chat_id}")
@@ -274,7 +290,7 @@ def delete_chat(
 
     Args:
         chat_id (str): A unique id for the session (created via "/chat/start").
-        db (Session): The injected SQLAlchemy database session.
+        chats_db (Session): The injected SQLAlchemy database session.
         current_user (User): The authenticated user, it provides the
                     user_id key to be along the chat_id key.
 
@@ -287,11 +303,11 @@ def delete_chat(
     chat = chats_db.get(Chat, (current_user.id, chat_id))
     if not chat:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Chat not found",
         )
 
     chats_db.delete(chat)
     chats_db.commit()
 
-    return {"message": f"Chat {chat.id} deleted successfully"}
+    return {"message": f"Chat {chat.chat_id} deleted successfully"}

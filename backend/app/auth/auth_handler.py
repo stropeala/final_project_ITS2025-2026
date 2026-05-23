@@ -38,40 +38,40 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def hash_password(plain_password: str) -> str:
     """
-    Hash a password using bcrypt.
+    Hashes a password using bcrypt.
 
     Args:
-        plain_password (str): The user-provided password.
+        plain_password (str): The user's password.
 
     Returns:
-        str: The bcrypt hash, safe to add to the database.
+        str: The bcrypt hash that is safe to add to the database.
     """
     return pwd_context.hash(plain_password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
-    Check a password against a stored bcrypt hash.
+    Checks a password against a stored bcrypt hash.
 
     Args:
-        plain_password (str): The password supplied at login.
+        plain_password (str): The user's password at login.
         hashed_password (str): The bcrypt hash previously stored for the user.
 
     Returns:
-        bool: True if the password matches the hash, False otherwise.
+        bool: True if the password matches the hash or False if not.
     """
     return pwd_context.verify(plain_password, hashed_password)
 
 
 def create_access_token(data: dict) -> str:
     """
-    Build a signed JWT access token with an expiry claim.
+    Builds a signed JWT access token with an expiry time.
 
-    Adds an "exp" field to the payload set to ACCESS_TOKEN_EXPIRE_MINUTES
-    from now (UTC), then signs the token with SECRET_KEY using ALGORITHM.
+    Adds an "exp" field to the payload set to ACCESS_TOKEN_EXPIRE_MINUTES from now
+    then signs the token with SECRET_KEY using ALGORITHM.
 
     Args:
-        data (dict): Claims to embed in the token (e.g., {"sub": user_id, "role": role}).
+        data (dict): Data to embed in the token (e.g., {"sub": user_id, "role": role}).
 
     Returns:
         str: The encoded JWT, ready to send back to the client.
@@ -87,13 +87,13 @@ def create_access_token(data: dict) -> str:
 
 def decode_access_token(token: str) -> dict:
     """
-    Verify and decode a JWT access token.
+    Verifies and decodes a JWT access token.
 
     Args:
         token (str): The raw JWT string from the Authorization header.
 
     Returns:
-        dict: The decoded payload claims if the token is valid.
+        dict: The decoded payload data if the token is valid.
 
     Raises:
         HTTPException (401): If the token is malformed, tampered with, or expired.
@@ -110,32 +110,32 @@ def decode_access_token(token: str) -> dict:
         )
 
 
+# HTTPBearer() tells FastAPI to extract that token string automatically.
 bearer_scheme = HTTPBearer()
 
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-    db: Session = Depends(get_postgresql_db),
+    user_db: Session = Depends(get_postgresql_db),
 ) -> User:
     """
     A FastAPI dependency function. Any route that lists this as a dependency
     will automatically require the caller to be logged in.
 
-    Decodes the JWT, extracts the "sub" claim as the user ID, and loads
+    Decodes the JWT, extracts the "sub" (subject) claim as the user ID, and loads
     the corresponding User row from PostgreSQL.
 
     Args:
         credentials (HTTPAuthorizationCredentials): Injected by FastAPI;
-            contains the bearer token from the Authorization header.
-        db (Session): The injected SQLAlchemy session for PostgreSQL.
+                contains the bearer token from the Authorization header.
+        user_db (Session): The injected SQLAlchemy session for PostgreSQL.
 
     Returns:
-        User: The authenticated user record.
+        User: The authenticated user data.
 
     Raises:
-        HTTPException (401): If the token is invalid, the user ID claim
-            is missing or non-numeric, or refers to a user that no longer
-            exists.
+        HTTPException (401): If the token is invalid, the user ID claim is missing
+                            or non-numeric, or refers to a user that no longer exists.
     """
 
     # Decode the token string into a Python dict
@@ -146,19 +146,28 @@ def get_current_user(
     user_id = payload.get("sub")
 
     if user_id is None:
-        raise HTTPException(status_code=401, detail="Token is missing user ID.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token is missing user ID.",
+        )
 
     try:
         user_id_int = int(user_id)
     except (TypeError, ValueError):
-        raise HTTPException(status_code=401, detail="Token has an invalid user ID.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has an invalid user ID.",
+        )
 
     # Look up the user in the database.
     # int(user_id) converts the string "5" back to the integer 5.
-    user = db.query(User).filter(User.id == user_id_int).first()
+    user = user_db.query(User).filter(User.id == user_id_int).first()
 
     if user is None:
-        raise HTTPException(status_code=401, detail="User account no longer exists.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account no longer exists.",
+        )
 
     return user
 
@@ -173,15 +182,15 @@ def require_role(*allowed_roles: str):
 
     Args:
         *allowed_roles (str): One or more role names that are permitted.
-            Casing must match what is stored on the User row (e.g., "Admin").
+                            (e.g., "Admin").
 
     Returns:
         Callable[..., User]: A FastAPI dependency that yields the current user
-        when authorized.
+                            when authorized.
 
     Raises:
         HTTPException (403): Raised by the returned dependency when the
-            current user's role is not in the allowed set.
+                            current user's role is not in the allowed set.
     """
 
     # This inner function is the actual dependency FastAPI will call

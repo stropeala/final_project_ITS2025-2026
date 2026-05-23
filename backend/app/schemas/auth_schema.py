@@ -10,7 +10,7 @@ class LoginRequest(BaseModel):
     Attributes:
         username (str): The user's unique username.
         password (str): The user's plaintext password, verified against the
-            stored bcrypt hash by the login handler.
+                        stored bcrypt hash by the login handler.
     """
 
     username: str
@@ -19,8 +19,6 @@ class LoginRequest(BaseModel):
 
 class UserCreate(BaseModel):
     """
-    Request body for the admin-only "POST /auth/users" endpoint.
-
     Used to register a new account. The password is hashed before storage.
 
     Attributes:
@@ -40,7 +38,7 @@ class TokenOut(BaseModel):
 
     Attributes:
         access_token (str): The signed JWT to send back on subsequent
-            requests as a bearer token.
+                            requests as a bearer token.
         token_type (str): The token scheme. Always "bearer".
     """
 
@@ -50,10 +48,8 @@ class TokenOut(BaseModel):
 
 class UserOut(BaseModel):
     """
-    Public, response-safe view of a User record.
-
-    Omits sensitive fields (e.g., hashed_password). Configured with
-    "from_attributes" so it can be built directly from an ORM User row.
+    Public, response-safe view of a User data.
+    Omits sensitive fields (e.g., hashed_password).
 
     Attributes:
         id (int): The user's database ID.

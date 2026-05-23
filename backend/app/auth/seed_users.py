@@ -25,12 +25,11 @@ if not DEFAULT_ADMIN_USERNAME or not DEFAULT_ADMIN_PASSWORD:
 
 def seed_admin():
     """
-    Ensure a default Admin account exists in PostgreSQL.
+    Ensures a default Admin account exists in PostgreSQL.
 
     Looks up an existing user whose username matches DEFAULT_ADMIN_USERNAME.
-    If none is found, creates a new Admin row with the hashed
-    DEFAULT_ADMIN_PASSWORD. Intended to run once on application startup
-    via the FastAPI lifespan so subsequent calls are not duplicated.
+    If none is found it then creates a new Admin row with the hashed
+    DEFAULT_ADMIN_PASSWORD. Runs once on application startup via the FastAPI lifespan.
 
     Args:
         None.
@@ -38,27 +37,28 @@ def seed_admin():
     Returns:
         None.
     """
-    with PostgreSQLSession() as db:
-        admin = db.query(User).filter(User.username == DEFAULT_ADMIN_USERNAME).first()
+    with PostgreSQLSession() as user_db:
+        admin = (
+            user_db.query(User).filter(User.username == DEFAULT_ADMIN_USERNAME).first()
+        )
         if not admin:
             new_admin = User(
                 username=DEFAULT_ADMIN_USERNAME,
                 hashed_password=hash_password(DEFAULT_ADMIN_PASSWORD),  # pyright: ignore
                 role="Admin",
             )
-            db.add(new_admin)
-            db.commit()
+            user_db.add(new_admin)
+            user_db.commit()
             print("Successfully seeded Admin user.")
 
 
 def seed_normal_user():
     """
-    Ensure a default non-admin User account exists in PostgreSQL.
+    Ensures a default normal user account exists in PostgreSQL.
 
     Looks up an existing user whose username matches DEFAULT_USER_USERNAME.
-    If none is found, creates a new "User"-role row with the hashed
-    DEFAULT_USER_PASSWORD. Intended to run once on application startup
-    via the FastAPI lifespan so subsequent calls are not duplicated.
+    If none is found it then creates a new normal user row with the hashed
+    DEFAULT_USER_PASSWORD. Runs once on application startup via the FastAPI lifespan.
 
     Args:
         None.
@@ -66,14 +66,16 @@ def seed_normal_user():
     Returns:
         None.
     """
-    with PostgreSQLSession() as db:
-        user = db.query(User).filter(User.username == DEFAULT_USER_USERNAME).first()
+    with PostgreSQLSession() as user_db:
+        user = (
+            user_db.query(User).filter(User.username == DEFAULT_USER_USERNAME).first()
+        )
         if not user:
             new_user = User(
                 username=DEFAULT_USER_USERNAME,
                 hashed_password=hash_password(DEFAULT_USER_PASSWORD),  # pyright: ignore
                 role="User",
             )
-            db.add(new_user)
-            db.commit()
+            user_db.add(new_user)
+            user_db.commit()
             print("Successfully seeded normal user.")
