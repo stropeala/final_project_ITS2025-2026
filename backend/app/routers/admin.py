@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.auth import hash_password, require_admin
+from app.auth import hash_password, role_admin
 from app.extensions import get_postgresql_db, get_sqlite_db
 from app.models import Chat, User
 from app.schemas import UserCreate, UserOut
@@ -20,7 +20,7 @@ admin = APIRouter(
 def create_user(
     payload: UserCreate,
     users_db: Session = Depends(get_postgresql_db),
-    require_admin: User = Depends(require_admin),
+    require_admin: User = Depends(role_admin),
 ):
     """
     Creates a new user. Admin-only.
@@ -65,7 +65,7 @@ def create_user(
 @admin.get("/users", response_model=list[UserOut])
 def list_users(
     users_db: Session = Depends(get_postgresql_db),
-    require_admin: User = Depends(require_admin),
+    require_admin: User = Depends(role_admin),
 ):
     """
     Lists every registered user. Admin-only.
@@ -85,17 +85,19 @@ def list_users(
 def delete_user(
     user_id: int,
     users_db: Session = Depends(get_postgresql_db),
-    require_admin: User = Depends(require_admin),
+    chats_db: Session = Depends(get_sqlite_db),
+    require_admin: User = Depends(role_admin),
 ):
     """
-    Deletes a user by ID. Admin-only.
+    Deletes a user and owned chats by ID. Admin-only.
 
     Admins are prevented from deleting their own account to avoid locking
     the system out.
 
     Args:
         user_id (int): The ID of the user to delete.
-        users_db (Session): The injected SQLAlchemy session for PostgreSQL.
+        users_db (Session): The injected SQLAlchemy session for PostgreSQL (users).
+        chats_db (Session): The injected SQLAlchemy session for SQLite (chats).
         require_admin (User): The authenticated admin making the request.
 
     Returns:
@@ -123,13 +125,16 @@ def delete_user(
     users_db.delete(user)
     users_db.commit()
 
+    chats_db.query(Chat).filter(Chat.user_id == user_id).delete()
+    chats_db.commit()
+
 
 @admin.get("/users/{user_id}/chats")
 def admin_list_user_chats(
     user_id: int,
     chats_db: Session = Depends(get_sqlite_db),
     users_db: Session = Depends(get_postgresql_db),
-    require_admin: User = Depends(require_admin),
+    require_admin: User = Depends(role_admin),
 ):
     """
     Lists every chat owned by a specific user. Admin-only.
@@ -174,7 +179,7 @@ def admin_get_user_chat(
     user_id: int,
     chat_id: str,
     chats_db: Session = Depends(get_sqlite_db),
-    require_admin: User = Depends(require_admin),
+    require_admin: User = Depends(role_admin),
 ):
     """
     Retrieves any user's chat by ID key. Admin-only.
@@ -214,7 +219,7 @@ def admin_delete_chat(
     user_id: int,
     chat_id: str,
     chats_db: Session = Depends(get_sqlite_db),
-    require_admin: User = Depends(require_admin),
+    require_admin: User = Depends(role_admin),
 ):
     """
     Deletes any user's chat by ID key. Admin-only.
