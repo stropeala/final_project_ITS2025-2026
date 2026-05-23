@@ -210,5 +210,5 @@ def require_role(*allowed_roles: str):
 
 # Handy shortcuts – routes can write Depends(require_admin) instead of
 # Depends(require_role("admin")) each time.
-require_admin = require_role("Admin")
-require_any = require_role("Admin", "User")
+role_admin = require_role("Admin")
+role_user = require_role("Admin", "User")

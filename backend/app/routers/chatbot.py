@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from requests import RequestException, get, post
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user, require_any
+from app.auth import get_current_user, role_user
 from app.extensions import get_sqlite_db
 from app.models import Chat, User
 from app.schemas import Query
@@ -25,9 +25,9 @@ chatbot = APIRouter(
 
 
 @chatbot.post("/generate")
-def generate_text(
+def generate_one_response(
     query: Query,
-    require_any: User = Depends(require_any),
+    require_user: User = Depends(role_user),
 ):
     """
     Generates a single-turn text response from a given prompt via Ollama.
@@ -39,8 +39,8 @@ def generate_text(
             - prompt (str): The input text to send to the model.
             - model (str): The Ollama model to use.
             - stream (bool): Whether to stream the response.
-        require_any (User): Unused; injected for its side effect of enforcing
-                            the Any role requirement.
+        require_user (User): Unused; injected for its side effect of enforcing
+                            the User role requirement.
 
     Returns:
         dict: A dictionary with a single key:
@@ -72,14 +72,14 @@ def generate_text(
 
 @chatbot.get("/models")
 def list_models(
-    require_any: User = Depends(require_any),
+    require_user: User = Depends(role_user),
 ):
     """
     Queries the Ollama "/api/tags" endpoint and returns the full list of models.
 
     Args:
-        require_any (User): Unused; injected for its side effect of enforcing
-                            the Any role requirement.
+        require_user (User): Unused; injected for its side effect of enforcing
+                            the User role requirement.
 
     Returns:
         dict: A dictionary with a single key:
@@ -106,8 +106,8 @@ def list_models(
         )
 
 
-@chatbot.post("/start/{chat_id}")
-def start_chat(
+@chatbot.post("/{chat_id}")
+def new_chat(
     chat_id: str,
     chats_db: Session = Depends(get_sqlite_db),
     current_user: User = Depends(get_current_user),
@@ -147,7 +147,7 @@ def start_chat(
 
 
 @chatbot.post("/{chat_id}/message")
-def add_message(
+def add_chat_message(
     chat_id: str,
     query: Query,
     chats_db: Session = Depends(get_sqlite_db),
@@ -224,7 +224,7 @@ def add_message(
         )
 
 
-@chatbot.get("/{user_id}/chats")
+@chatbot.get("/chats")
 def get_chats(
     chats_db: Session = Depends(get_sqlite_db),
     current_user: User = Depends(get_current_user),
