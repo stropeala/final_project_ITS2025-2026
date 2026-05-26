@@ -243,8 +243,6 @@ dist-ssr
 
 # My additions
 .zed
-migrations
-alembic.ini
 chats.db
 users.db
 README_frontend.md
