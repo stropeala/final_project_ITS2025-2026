@@ -41,12 +41,12 @@ A single chat turn touches every layer.
 
 ```mermaid
 flowchart TD
-    A["User sends a message<br/>POST /chat/chat_id/message + JWT"]
-    B["Backend verifies token<br/>loads user from PostgreSQL"]
-    C["Save user turn to SQLite<br/>appends to chat history"]
-    D["Forward history to Ollama<br/>local model generates reply"]
-    E["Save reply to SQLite<br/>rolls back user turn on error"]
-    F["Return reply to frontend<br/>rendered as Markdown"]
+    A["User sends a message:<br/>chat_id/message + JWT"]
+    B["Backend verifies token:<br/>loads user from PostgreSQL"]
+    C["Save user turn to SQLite:<br/>appends to chat history"]
+    D["Forward history to Ollama:<br/>local model generates reply"]
+    E["Save reply to SQLite:<br/>rolls back user turn on error"]
+    F["Return reply to frontend:<br/>rendered as Markdown"]
 
     A --> B --> C --> D --> E --> F
 ```
