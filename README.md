@@ -45,7 +45,7 @@ flowchart TD
     B["Backend verifies token<br/>then loads user from PostgreSQL"]
     C["Save user turn to SQLite<br/>then appends to chat history"]
     D["Forward history to Ollama<br/>and the local model generates a reply"]
-    E["Save reply to SQLite<br/>on generation error it rolls back"]
+    E["Save reply to SQLite,<br/>on generation error it rolls back"]
     F["Return reply to frontend<br/>then renders reply"]
 
     A --> B --> C --> D --> E --> F
